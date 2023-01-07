@@ -12,6 +12,7 @@ pub struct StatesPlugin;
 enum State {
     Intro,
     World,
+    DeepDive,
 }
 
 struct IntroState {
@@ -20,6 +21,10 @@ struct IntroState {
     current_story_line: usize,
 }
 struct WorldState {
+    test: u32
+}
+
+struct DeepDiveState {
     test: u32
 }
 
@@ -41,6 +46,14 @@ impl WorldState {
     }
 }
 
+impl DeepDiveState {
+    fn new() -> Self {
+        DeepDiveState {
+            test: 0
+        }
+    }
+}
+
 #[derive(Component)]
 struct StoryText;
 
@@ -56,12 +69,16 @@ struct IntroData(IntroState);
 #[derive(Resource)]
 struct WorldData(WorldState);
 
+#[derive(Resource)]
+struct DeepDiveData(DeepDiveState);
+
 impl Plugin for StatesPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(CurrentState(State::Intro))
         .insert_resource(NextState(State::Intro))
         .insert_resource(IntroData(IntroState::new()))
         .insert_resource(WorldData(WorldState::new()))
+        .insert_resource(DeepDiveData(DeepDiveState::new()))
         .add_startup_system(start_initial_state)
         .add_system_set(
             SystemSet::new()
@@ -199,6 +216,56 @@ impl WorldState {
         if keyboard_input.just_pressed(KeyCode::Escape) {
             println!("MENU")
         }
+
+        if keyboard_input.just_pressed(KeyCode::P) {
+            next_state.0 = State::DeepDive;
+        }
+    }
+
+    fn close(
+        &mut self,
+        commands: &mut Commands,
+        entity_query: &mut Query<Entity, Without<Camera>>,
+    ) {
+        println!("close world");
+        for entity in entity_query.iter() {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+impl DeepDiveState {
+    fn start(
+        &mut self,
+        commands: &mut Commands,
+        asset_server: &Res<AssetServer>,
+    ) {
+        println!("Start deep dive");
+
+        commands.spawn(SpriteBundle {
+            sprite: Sprite {
+                color: Color::rgba(1.0, 1.0, 1.0, 1.0), //fade in later?
+                ..default()
+            },
+            texture: asset_server.load("textures/helionix_logo.png"),
+            transform: Transform::from_scale(Vec3::splat(4.0)),
+            ..default()
+        });
+    }
+
+    fn run(
+        &mut self,
+        keyboard_input: Res<Input<KeyCode>>,
+        mut next_state: ResMut<NextState>,
+    ) {
+
+        if keyboard_input.just_pressed(KeyCode::Escape) {
+            println!("MENU")
+        }
+
+        if keyboard_input.just_pressed(KeyCode::P) {
+            next_state.0 = State::World;
+        }
     }
 
     fn close(
@@ -222,6 +289,7 @@ fn run_current_game_state(
     current_state: Res<CurrentState>,
     mut intro_state: ResMut<IntroData>,
     mut world_state: ResMut<WorldData>,
+    mut deep_dive_state: ResMut<DeepDiveData>,
 ) {
     match current_state.0 {
         State::Intro => {
@@ -229,6 +297,9 @@ fn run_current_game_state(
         },
         State::World => {
             world_state.0.run(keyboard_input, next_state);
+        },
+        State::DeepDive => {
+            deep_dive_state.0.run(keyboard_input, next_state);
         }
     }
 }
@@ -239,12 +310,16 @@ fn start_initial_state(
     current_state: Res<CurrentState>,
     mut intro_state: ResMut<IntroData>,
     mut world_state: ResMut<WorldData>,
+    mut deep_dive_state: ResMut<DeepDiveData>,
 ) {
     match current_state.0 {
         State::Intro => {
             intro_state.0.start(&mut commands, &asset_server);
         },
         State::World => {
+            world_state.0.start(&mut commands, &asset_server);
+        },
+        State::DeepDive => {
             world_state.0.start(&mut commands, &asset_server);
         }
     }
@@ -255,14 +330,32 @@ fn manage_state_changes(
     mut current_state: ResMut<CurrentState>,
     mut intro_state: ResMut<IntroData>,
     mut world_state: ResMut<WorldData>,
+    mut deep_dive_state: ResMut<DeepDiveData>,
 
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut entity_query: Query<Entity, Without<Camera>>,
 ) {
     if next_state.is_changed() && !next_state.is_added() {
-        intro_state.0.close(&mut commands, &mut entity_query);
-        current_state.0 = State::World;
-        world_state.0.start(&mut commands, &asset_server);
+
+        match (&current_state.0, &next_state.0) {
+            (State::Intro, State::World) => {
+                intro_state.0.close(&mut commands, &mut entity_query);
+                current_state.0 = State::World;
+                world_state.0.start(&mut commands, &asset_server);
+            },
+            (State::World, State::DeepDive) => {
+                world_state.0.close(&mut commands, &mut entity_query);
+                current_state.0 = State::DeepDive;
+                deep_dive_state.0.start(&mut commands, &asset_server);
+            }
+            (State::DeepDive, State::World) => {
+                deep_dive_state.0.close(&mut commands, &mut entity_query);
+                current_state.0 = State::World;
+                world_state.0.start(&mut commands, &asset_server);
+            },
+            _ => ()
+        }
+
     }
 }
