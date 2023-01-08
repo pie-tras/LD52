@@ -14,7 +14,7 @@ pub struct StatesPlugin;
 
 enum State {
     Intro,
-    World,
+    TechShop,
     DeepDive,
 }
 
@@ -23,7 +23,7 @@ struct IntroState {
     story_texts: Vec<String>,
     current_story_line: usize,
 }
-struct WorldState {
+struct TechShopState {
     test: u32
 }
 
@@ -41,9 +41,9 @@ impl IntroState {
     }
 }
 
-impl WorldState {
+impl TechShopState {
     fn new() -> Self {
-        WorldState {
+        TechShopState {
             test: 0
         }
     }
@@ -56,6 +56,9 @@ impl DeepDiveState {
         }
     }
 }
+
+#[derive(Component, Deref, DerefMut)]
+struct AnimationTimer(Timer);
 
 #[derive(Component)]
 struct StoryText;
@@ -87,7 +90,7 @@ struct NextState(State);
 struct IntroData(IntroState);
 
 #[derive(Resource)]
-struct WorldData(WorldState);
+struct TechShopData(TechShopState);
 
 #[derive(Resource)]
 struct DeepDiveData(DeepDiveState);
@@ -97,10 +100,10 @@ struct DeepDiveDataBank(u32);
 
 impl Plugin for StatesPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(CurrentState(State::DeepDive))
+        app.insert_resource(CurrentState(State::TechShop))
         .insert_resource(NextState(State::Intro))
         .insert_resource(IntroData(IntroState::new()))
-        .insert_resource(WorldData(WorldState::new()))
+        .insert_resource(TechShopData(TechShopState::new()))
         .insert_resource(DeepDiveData(DeepDiveState::new()))
         .insert_resource(DeepDiveDataBank(0))
         .add_startup_system(start_initial_state)
@@ -108,6 +111,7 @@ impl Plugin for StatesPlugin {
             SystemSet::new()
             .with_run_criteria(FixedTimestep::step(TIME_STEP as f64))
             .with_system(run_current_game_state)
+            .with_system(animate_sprite)
             .with_system(manage_state_changes.before(run_current_game_state))
         );
     }
@@ -193,7 +197,7 @@ impl IntroState {
                 self.current_text = String::from("");
                 println!("{}", self.story_texts[self.current_story_line])
             } else {
-                next_state.0 = State::World;
+                next_state.0 = State::TechShop;
             }
         }
     }
@@ -212,37 +216,109 @@ impl IntroState {
     }
 }
 
-impl WorldState {
+impl TechShopState {
     fn start(
         &mut self,
         commands: &mut Commands,
         asset_server: &Res<AssetServer>,
+        texture_atlases: &mut ResMut<Assets<TextureAtlas>>,
     ) {
         println!("Start world");
+
+        let texture_handle = asset_server.load("textures/player_walk.png");
+        let texture_atlas =
+            TextureAtlas::from_grid(texture_handle, Vec2::new(32.0, 32.0), 1, 8, None, None);
+        let texture_atlas_handle = texture_atlases.add(texture_atlas);
+
+        let mut player_transform = Transform::from_scale(Vec3::splat(5.0));
+        player_transform.translation.z = 100.0;
+        let mut player_anim_timer = Timer::from_seconds(0.1, TimerMode::Repeating);
+        player_anim_timer.pause();
+
+        commands.spawn((
+            SpriteSheetBundle {
+                texture_atlas: texture_atlas_handle,
+                transform: player_transform,
+                ..default()
+            },
+            AnimationTimer(player_anim_timer),
+            Player {
+                velocity: Vec2::new(0.0, 0.0)
+            },
+        ));
+
+        let mut background_transform = Transform::from_scale(Vec3::splat(5.0));
+        background_transform.translation.z = 0.0;
+        background_transform.translation.y = 24.0;
 
         commands.spawn(SpriteBundle {
             sprite: Sprite {
                 color: Color::rgba(1.0, 1.0, 1.0, 1.0), //fade in later?
                 ..default()
             },
-            texture: asset_server.load("textures/fusiogenic_logo.png"),
-            transform: Transform::from_scale(Vec3::splat(4.0)),
+            texture: asset_server.load("textures/tech_shop.png"),
+            transform: background_transform,
             ..default()
         });
+
+     
+        // commands.spawn(PointLightBundle {
+        //     transform: Transform::from_xyz(0.0, 0.0, 0.0),
+        //     ..default()
+        // });
     }
 
     fn run(
         &mut self,
         keyboard_input: Res<Input<KeyCode>>,
         mut next_state: ResMut<NextState>,
+        mut player_query: Query<(&mut TextureAtlasSprite, &mut AnimationTimer, &mut Transform, &mut Player), With<Player>>,
     ) {
+        for (mut sprite, mut timer, mut player_transform, mut player) in player_query.iter_mut() {
 
-        if keyboard_input.just_pressed(KeyCode::Escape) {
-            println!("MENU")
-        }
+            if keyboard_input.pressed(KeyCode::A) {
+                if timer.paused() {
+                    timer.unpause();
+                }
+                player.velocity.x = -12.0;
 
-        if keyboard_input.just_pressed(KeyCode::P) {
-            next_state.0 = State::DeepDive;
+                sprite.flip_x = true;
+
+            } else if keyboard_input.pressed(KeyCode::D) {
+                if timer.paused() {
+                    timer.unpause();
+                }
+
+                sprite.flip_x = false;
+
+                player.velocity.x = 12.0;
+            } else {
+                player.velocity.x = 0.0;
+                if timer.just_finished() {
+                    timer.pause();
+                }
+            }
+    
+            let mut target = Vec3::new(player_transform.translation.x + player.velocity.x, 
+                                  player_transform.translation.y, 
+                                  player_transform.translation.z);
+
+            target.x = target.x.clamp(-430.0, 430.0);
+    
+            // if dive_collision_check(target, &wall_query, &lava_query, &data_query, &portal_query, &mut self.level, &mut deep_dive_data_bank, &mut next_state) {
+            player_transform.translation = target;
+            // } else {
+            //     player.velocity.x = 0.0;
+            //     player.velocity.y = 0.0;
+            // }
+    
+            if keyboard_input.just_pressed(KeyCode::Escape) {
+                println!("MENU")
+            }
+    
+            if keyboard_input.just_pressed(KeyCode::P) {
+                next_state.0 = State::DeepDive;
+            }
         }
     }
 
@@ -359,7 +435,7 @@ impl DeepDiveState {
         &mut self,
         keyboard_input: Res<Input<KeyCode>>,
         mut next_state: ResMut<NextState>,
-        mut player_query: Query<(&mut Transform, &mut Player), With<Player>>,
+        mut player_query: Query<(&mut TextureAtlasSprite, &mut AnimationTimer, &mut Transform, &mut Player), With<Player>>,
         wall_query: Query<&Transform, (Without<Player>, With<Collider>)>,
         lava_query: Query<&Transform, (Without<Player>, With<Lava>)>,
         data_query: Query<&Transform, (Without<Player>, With<DataPort>)>,
@@ -367,8 +443,7 @@ impl DeepDiveState {
 
         mut deep_dive_data_bank: ResMut<DeepDiveDataBank>,
     ) {
-
-        for (mut player_transform, mut player) in player_query.iter_mut() {
+        for (mut sprite, mut timer, mut player_transform, mut player) in player_query.iter_mut() {
             
             if player.velocity.x == 0.0 && player.velocity.y == 0.0 {
                 if keyboard_input.just_pressed(KeyCode::A) {
@@ -397,7 +472,7 @@ impl DeepDiveState {
             }
     
             if keyboard_input.just_pressed(KeyCode::P) {
-                next_state.0 = State::World;
+                next_state.0 = State::TechShop;
             }
         }
     }
@@ -420,7 +495,7 @@ fn run_current_game_state(
 
     story_query: Query<&mut Text, With<StoryText>>,
   
-    mut player_query: Query<(&mut Transform, &mut Player), With<Player>>,
+    mut player_query: Query<(&mut TextureAtlasSprite, &mut AnimationTimer, &mut Transform, &mut Player), With<Player>>,
     wall_query: Query<&Transform, (Without<Player>, With<Collider>)>,
     lava_query: Query<&Transform, (Without<Player>, With<Lava>)>,
     data_query: Query<&Transform, (Without<Player>, With<DataPort>)>,
@@ -430,15 +505,15 @@ fn run_current_game_state(
 
     current_state: Res<CurrentState>,
     mut intro_state: ResMut<IntroData>,
-    mut world_state: ResMut<WorldData>,
+    mut tech_shop_state: ResMut<TechShopData>,
     mut deep_dive_state: ResMut<DeepDiveData>,
 ) {
     match current_state.0 {
         State::Intro => {
             intro_state.0.run(keyboard_input, next_state, story_query);
         },
-        State::World => {
-            world_state.0.run(keyboard_input, next_state);
+        State::TechShop => {
+            tech_shop_state.0.run(keyboard_input, next_state, player_query);
         },
         State::DeepDive => {
             deep_dive_state.0.run(keyboard_input, next_state, player_query, wall_query, lava_query, data_query, portal_query, deep_dive_data_bank);
@@ -451,8 +526,10 @@ fn start_initial_state(
     asset_server: Res<AssetServer>,
     current_state: Res<CurrentState>,
     mut intro_state: ResMut<IntroData>,
-    mut world_state: ResMut<WorldData>,
+    mut tech_shop_state: ResMut<TechShopData>,
     mut deep_dive_state: ResMut<DeepDiveData>,
+
+    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
 
     mut deep_dive_data_bank: ResMut<DeepDiveDataBank>,
 ) {
@@ -460,8 +537,8 @@ fn start_initial_state(
         State::Intro => {
             intro_state.0.start(&mut commands, &asset_server);
         },
-        State::World => {
-            world_state.0.start(&mut commands, &asset_server);
+        State::TechShop => {
+            tech_shop_state.0.start(&mut commands, &asset_server, &mut texture_atlases);
         },
         State::DeepDive => {
             deep_dive_state.0.start(&mut commands, &asset_server, deep_dive_data_bank);
@@ -473,10 +550,12 @@ fn manage_state_changes(
     next_state: ResMut<NextState>,
     mut current_state: ResMut<CurrentState>,
     mut intro_state: ResMut<IntroData>,
-    mut world_state: ResMut<WorldData>,
+    mut tech_shop_state: ResMut<TechShopData>,
     mut deep_dive_state: ResMut<DeepDiveData>,
 
     mut deep_dive_data_bank: ResMut<DeepDiveDataBank>,
+
+    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
 
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -485,20 +564,20 @@ fn manage_state_changes(
     if next_state.is_changed() && !next_state.is_added() {
 
         match (&current_state.0, &next_state.0) {
-            (State::Intro, State::World) => {
+            (State::Intro, State::TechShop) => {
                 intro_state.0.close(&mut commands, &mut entity_query);
-                current_state.0 = State::World;
-                world_state.0.start(&mut commands, &asset_server);
+                current_state.0 = State::TechShop;
+                tech_shop_state.0.start(&mut commands, &asset_server, &mut texture_atlases);
             },
-            (State::World, State::DeepDive) => {
-                world_state.0.close(&mut commands, &mut entity_query);
+            (State::TechShop, State::DeepDive) => {
+                tech_shop_state.0.close(&mut commands, &mut entity_query);
                 current_state.0 = State::DeepDive;
                 deep_dive_state.0.start(&mut commands, &asset_server, deep_dive_data_bank);
             }
-            (State::DeepDive, State::World) => {
+            (State::DeepDive, State::TechShop) => {
                 deep_dive_state.0.close(&mut commands, &mut entity_query);
-                current_state.0 = State::World;
-                world_state.0.start(&mut commands, &asset_server);
+                current_state.0 = State::TechShop;
+                tech_shop_state.0.start(&mut commands, &asset_server, &mut texture_atlases);
             },
             (State::DeepDive, State::DeepDive) => {
                 deep_dive_state.0.close(&mut commands, &mut entity_query);
@@ -533,7 +612,7 @@ fn dive_collision_check(
             if deep_dive_data_bank.0 < 1 {
                 deep_dive_data_bank.0 += 1;
             }
-            next_state.0 = State::World;
+            next_state.0 = State::TechShop;
         }
     }
 
@@ -577,5 +656,26 @@ fn dive_collision_check(
     }
 
     true
+}
+
+fn animate_sprite(
+    time: Res<Time>,
+    texture_atlases: Res<Assets<TextureAtlas>>,
+    mut query: Query<(
+        &mut AnimationTimer,
+        &mut TextureAtlasSprite,
+        &Handle<TextureAtlas>,
+    )>,
+) {
+    for (mut timer, mut sprite, texture_atlas_handle) in &mut query {
+        timer.tick(time.delta());
+
+        let texture_atlas = texture_atlases.get(texture_atlas_handle).unwrap();
+        if timer.paused() {
+            sprite.index = 0;
+        } else if timer.just_finished() {
+            sprite.index = (sprite.index + 1) % texture_atlas.textures.len();
+        }
+    }
 }
 
