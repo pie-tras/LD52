@@ -1,11 +1,19 @@
 use std::fs;
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+};
 
 use bevy::{
     prelude::*,
+    sprite::collide_aabb::{collide, Collision},
     time::FixedTimestep,
 };
 
 const TIME_STEP: f32 = 1.0 / 60.0;
+
+const DEEP_DIVE_TILE_SCALE: f32 = 16.0;
+const DEEP_DIVE_TILE_COUNT: i32 = 16;
 
 pub struct StatesPlugin;
 
@@ -57,6 +65,21 @@ impl DeepDiveState {
 #[derive(Component)]
 struct StoryText;
 
+#[derive(Component)]
+struct Player;
+
+#[derive(Component)]
+struct Collider;
+
+#[derive(Component)]
+struct Lava;
+
+#[derive(Component)]
+struct DataPort;
+
+#[derive(Component, Deref, DerefMut)]
+struct Velocity(Vec2);
+
 #[derive(Resource)]
 struct CurrentState(State);
 
@@ -74,7 +97,7 @@ struct DeepDiveData(DeepDiveState);
 
 impl Plugin for StatesPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(CurrentState(State::Intro))
+        app.insert_resource(CurrentState(State::DeepDive))
         .insert_resource(NextState(State::Intro))
         .insert_resource(IntroData(IntroState::new()))
         .insert_resource(WorldData(WorldState::new()))
@@ -83,8 +106,8 @@ impl Plugin for StatesPlugin {
         .add_system_set(
             SystemSet::new()
             .with_run_criteria(FixedTimestep::step(TIME_STEP as f64))
-            .with_system(run_current_game_state)
             .with_system(manage_state_changes)
+            .with_system(run_current_game_state)
         );
     }
 }
@@ -242,22 +265,122 @@ impl DeepDiveState {
     ) {
         println!("Start deep dive");
 
-        commands.spawn(SpriteBundle {
-            sprite: Sprite {
-                color: Color::rgba(1.0, 1.0, 1.0, 1.0), //fade in later?
+        let file = File::open("assets/dives/map.txt").expect("No map file found");
+        let mut tiles: Vec<Entity> = Vec::new();
+
+        for (y, line) in BufReader::new(file).lines().enumerate() {
+            if let Ok(line) = line {
+                for (x, char) in line.chars().enumerate() {
+
+                    let mut transform = Transform::from_scale(Vec3::splat(DEEP_DIVE_TILE_SCALE));
+                    transform.translation.x = (x as f32 * DEEP_DIVE_TILE_SCALE) - (DEEP_DIVE_TILE_SCALE * DEEP_DIVE_TILE_COUNT as f32);
+                    transform.translation.y = (y as f32 * DEEP_DIVE_TILE_SCALE) - (DEEP_DIVE_TILE_SCALE * DEEP_DIVE_TILE_COUNT as f32);
+
+                    let mut color = Color::rgba(1.0, 1.0, 1.0, 1.0);
+
+                    if char == '#' {
+                        color = Color::rgba(1.0, 1.0, 1.0, 1.0);
+                    }
+                    if char == '~' {
+                        color = Color::rgba(1.0, 0.0, 0.0, 1.0);
+                    }
+                    if char == '@' {
+                        color = Color::rgba(0.0, 1.0, 0.0, 1.0);
+                    }
+
+                    if char == '#' || char == '~' || char == '@' {
+                        let tile = commands.spawn(SpriteBundle {
+                            sprite: Sprite {
+                                color,
+                                ..default()
+                            },
+                            transform,
+                            ..default()
+                        }).id();
+
+                        if char == '#' {
+                            commands.entity(tile).insert(Collider);
+                        }
+                        if char == '~' {
+                            commands.entity(tile).insert(Lava);
+                        }
+                        if char == '@' {
+                            commands.entity(tile).insert(DataPort);
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut transform = Transform::from_scale(Vec3::splat(DEEP_DIVE_TILE_SCALE));
+        transform.translation.x = 0.0 as f32 * DEEP_DIVE_TILE_SCALE;
+        transform.translation.y = 0.0 as f32 * DEEP_DIVE_TILE_SCALE;
+
+        commands.spawn((SpriteBundle {
+                sprite: Sprite {
+                    color: Color::rgba(0.0, 0.3, 1.0, 1.0),
+                    ..default()
+                },
+                transform,
                 ..default()
-            },
-            texture: asset_server.load("textures/helionix_logo.png"),
-            transform: Transform::from_scale(Vec3::splat(4.0)),
-            ..default()
-        });
+            }, 
+            Player,
+            Velocity(Vec2::new(0.0, 0.0)),
+        ));
     }
 
     fn run(
         &mut self,
         keyboard_input: Res<Input<KeyCode>>,
         mut next_state: ResMut<NextState>,
+        mut player_query: Query<(&mut Transform, &mut Velocity), With<Player>>,
+        wall_query: Query<&Transform, (Without<Player>, With<Collider>)>,
+        lava_query: Query<&Transform, (Without<Player>, With<Lava>)>,
+        data_query: Query<&Transform, (Without<Player>, With<DataPort>)>,
     ) {
+        let (mut player_transform, mut player_velocity) = player_query.single_mut();
+
+        if player_velocity.x == 0.0 && player_velocity.y == 0.0 {
+            if keyboard_input.just_pressed(KeyCode::A) {
+                player_velocity.x = -DEEP_DIVE_TILE_SCALE;
+            } else if keyboard_input.just_pressed(KeyCode::W) {
+                player_velocity.y = DEEP_DIVE_TILE_SCALE;
+            } else if keyboard_input.just_pressed(KeyCode::S) {
+                player_velocity.y = -DEEP_DIVE_TILE_SCALE;
+            } else if keyboard_input.just_pressed(KeyCode::D) {
+                player_velocity.x = DEEP_DIVE_TILE_SCALE;
+            }
+        }
+
+        let target = Vec3::new(player_transform.translation.x + player_velocity.x,
+            player_transform.translation.y + player_velocity.y, 0.0);
+
+        if dive_collision_check(target, &wall_query, &lava_query, &data_query, &mut next_state) {
+            player_transform.translation = target;
+        } else {
+            player_velocity.x = 0.0;
+            player_velocity.y = 0.0;
+        }
+
+        if player_transform.translation.x > DEEP_DIVE_TILE_SCALE * DEEP_DIVE_TILE_COUNT as f32 {
+            player_velocity.x = 0.0;
+            player_transform.translation.x = DEEP_DIVE_TILE_SCALE * DEEP_DIVE_TILE_COUNT as f32;
+        }
+
+        if player_transform.translation.x < -DEEP_DIVE_TILE_SCALE * DEEP_DIVE_TILE_COUNT as f32 {
+            player_velocity.x = 0.0;
+            player_transform.translation.x = -DEEP_DIVE_TILE_SCALE * DEEP_DIVE_TILE_COUNT as f32;
+        }
+
+        if player_transform.translation.y > DEEP_DIVE_TILE_SCALE * DEEP_DIVE_TILE_COUNT as f32 {
+            player_velocity.y = 0.0;
+            player_transform.translation.y = DEEP_DIVE_TILE_SCALE * DEEP_DIVE_TILE_COUNT as f32;
+        }
+
+        if player_transform.translation.y < -DEEP_DIVE_TILE_SCALE * DEEP_DIVE_TILE_COUNT as f32 {
+            player_velocity.y = 0.0;
+            player_transform.translation.y = -DEEP_DIVE_TILE_SCALE * DEEP_DIVE_TILE_COUNT as f32;
+        }
 
         if keyboard_input.just_pressed(KeyCode::Escape) {
             println!("MENU")
@@ -285,6 +408,11 @@ fn run_current_game_state(
     mut next_state: ResMut<NextState>,
 
     story_query: Query<&mut Text, With<StoryText>>,
+  
+    mut player_query: Query<(&mut Transform, &mut Velocity), With<Player>>,
+    wall_query: Query<&Transform, (Without<Player>, With<Collider>)>,
+    lava_query: Query<&Transform, (Without<Player>, With<Lava>)>,
+    data_query: Query<&Transform, (Without<Player>, With<DataPort>)>,
 
     current_state: Res<CurrentState>,
     mut intro_state: ResMut<IntroData>,
@@ -299,7 +427,7 @@ fn run_current_game_state(
             world_state.0.run(keyboard_input, next_state);
         },
         State::DeepDive => {
-            deep_dive_state.0.run(keyboard_input, next_state);
+            deep_dive_state.0.run(keyboard_input, next_state, player_query, wall_query, lava_query, data_query);
         }
     }
 }
@@ -320,7 +448,7 @@ fn start_initial_state(
             world_state.0.start(&mut commands, &asset_server);
         },
         State::DeepDive => {
-            world_state.0.start(&mut commands, &asset_server);
+            deep_dive_state.0.start(&mut commands, &asset_server);
         }
     }
 }
@@ -354,8 +482,61 @@ fn manage_state_changes(
                 current_state.0 = State::World;
                 world_state.0.start(&mut commands, &asset_server);
             },
+            (State::DeepDive, State::DeepDive) => {
+                deep_dive_state.0.close(&mut commands, &mut entity_query);
+                current_state.0 = State::DeepDive;
+                deep_dive_state.0.start(&mut commands, &asset_server);
+            },
             _ => ()
         }
 
     }
 }
+
+fn dive_collision_check(
+    target_player_pos: Vec3,
+    wall_query: &Query<&Transform, (Without<Player>, With<Collider>)>,
+    lava_query: &Query<&Transform, (Without<Player>, With<Lava>)>,
+    data_query: &Query<&Transform, (Without<Player>, With<DataPort>)>,
+    next_state: &mut ResMut<NextState>,
+) -> bool {
+
+    for data_trans in data_query.iter() {
+        let collision = collide(
+            target_player_pos,
+            Vec2::splat(DEEP_DIVE_TILE_SCALE),
+            data_trans.translation,
+            Vec2::splat(DEEP_DIVE_TILE_SCALE),
+        );
+        if collision.is_some() {
+            next_state.0 = State::World;
+        }
+    }
+
+    for lava_trans in lava_query.iter() {
+        let collision = collide(
+            target_player_pos,
+            Vec2::splat(DEEP_DIVE_TILE_SCALE),
+            lava_trans.translation,
+            Vec2::splat(DEEP_DIVE_TILE_SCALE),
+        );
+        if collision.is_some() {
+            next_state.0 = State::DeepDive;
+        }
+    }
+
+    for wall_trans in wall_query.iter() {
+        let collision = collide(
+            target_player_pos,
+            Vec2::splat(DEEP_DIVE_TILE_SCALE),
+            wall_trans.translation,
+            Vec2::splat(DEEP_DIVE_TILE_SCALE),
+        );
+        if collision.is_some() {
+            return false;
+        }
+    }
+
+    true
+}
+
