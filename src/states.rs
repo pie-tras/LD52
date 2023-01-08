@@ -107,8 +107,8 @@ impl Plugin for StatesPlugin {
         .add_system_set(
             SystemSet::new()
             .with_run_criteria(FixedTimestep::step(TIME_STEP as f64))
-            .with_system(manage_state_changes)
             .with_system(run_current_game_state)
+            .with_system(manage_state_changes.before(run_current_game_state))
         );
     }
 }
@@ -367,7 +367,9 @@ impl DeepDiveState {
 
         mut deep_dive_data_bank: ResMut<DeepDiveDataBank>,
     ) {
-        if let (mut player_transform, mut player) = player_query.single_mut() {
+
+        for (mut player_transform, mut player) in player_query.iter_mut() {
+            
             if player.velocity.x == 0.0 && player.velocity.y == 0.0 {
                 if keyboard_input.just_pressed(KeyCode::A) {
                     player.velocity.x = -DEEP_DIVE_TILE_SCALE;
