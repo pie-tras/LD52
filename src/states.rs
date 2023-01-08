@@ -100,7 +100,7 @@ struct DeepDiveDataBank(u32);
 
 impl Plugin for StatesPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(CurrentState(State::TechShop))
+        app.insert_resource(CurrentState(State::DeepDive))
         .insert_resource(NextState(State::Intro))
         .insert_resource(IntroData(IntroState::new()))
         .insert_resource(TechShopData(TechShopState::new()))
@@ -339,6 +339,7 @@ impl DeepDiveState {
         &mut self,
         commands: &mut Commands,
         asset_server: &Res<AssetServer>,
+        texture_atlases: &mut ResMut<Assets<TextureAtlas>>,
         mut deep_dive_data_bank: ResMut<DeepDiveDataBank>,
     ) {
         println!("Start deep dive");
@@ -415,17 +416,25 @@ impl DeepDiveState {
         transform.translation.x = 0.0 as f32 * DEEP_DIVE_TILE_SCALE;
         transform.translation.y = 0.0 as f32 * DEEP_DIVE_TILE_SCALE;
 
-        commands.spawn((SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgba(0.0, 0.3, 1.0, 1.0),
-                    ..default()
-                },
-                transform,
+        let texture_handle = asset_server.load("textures/player_walk.png");
+        let texture_atlas =
+            TextureAtlas::from_grid(texture_handle, Vec2::new(32.0, 32.0), 1, 8, None, None);
+        let texture_atlas_handle = texture_atlases.add(texture_atlas);
+
+        let mut player_transform = Transform::from_scale(Vec3::splat(0.5));
+        player_transform.translation.z = 100.0;
+        let mut player_anim_timer = Timer::from_seconds(0.1, TimerMode::Repeating);
+
+        commands.spawn((
+            SpriteSheetBundle {
+                texture_atlas: texture_atlas_handle,
+                transform: player_transform,
                 ..default()
-            }, 
+            },
+            AnimationTimer(player_anim_timer),
             Player {
-                velocity: Vec2::new(0.0, 0.0),
-            }
+                velocity: Vec2::new(0.0, 0.0)
+            },
         ));
 
         println!("Created player")
@@ -541,7 +550,7 @@ fn start_initial_state(
             tech_shop_state.0.start(&mut commands, &asset_server, &mut texture_atlases);
         },
         State::DeepDive => {
-            deep_dive_state.0.start(&mut commands, &asset_server, deep_dive_data_bank);
+            deep_dive_state.0.start(&mut commands, &asset_server, &mut texture_atlases, deep_dive_data_bank);
         }
     }
 }
@@ -572,7 +581,7 @@ fn manage_state_changes(
             (State::TechShop, State::DeepDive) => {
                 tech_shop_state.0.close(&mut commands, &mut entity_query);
                 current_state.0 = State::DeepDive;
-                deep_dive_state.0.start(&mut commands, &asset_server, deep_dive_data_bank);
+                deep_dive_state.0.start(&mut commands, &asset_server, &mut texture_atlases, deep_dive_data_bank);
             }
             (State::DeepDive, State::TechShop) => {
                 deep_dive_state.0.close(&mut commands, &mut entity_query);
@@ -582,7 +591,7 @@ fn manage_state_changes(
             (State::DeepDive, State::DeepDive) => {
                 deep_dive_state.0.close(&mut commands, &mut entity_query);
                 current_state.0 = State::DeepDive;
-                deep_dive_state.0.start(&mut commands, &asset_server, deep_dive_data_bank);
+                deep_dive_state.0.start(&mut commands, &asset_server, &mut texture_atlases, deep_dive_data_bank);
             },
             _ => ()
         }
