@@ -103,6 +103,28 @@ impl DeepDiveState {
     }
 }
 
+struct StateCollection {
+    intro_state: IntroState,
+    tech_shop_state: TechShopState,
+    alleyway_state: AlleywayState,
+    cyberway_state: CyberwayState,
+    cafe_state: CafeState,
+    deep_dive_state: DeepDiveState,
+}
+
+impl StateCollection {
+    fn new() -> Self {
+        StateCollection {
+            intro_state: IntroState::new(),
+            tech_shop_state: TechShopState::new(),
+            alleyway_state: AlleywayState::new(),
+            cyberway_state: CyberwayState::new(),
+            cafe_state: CafeState::new(),
+            deep_dive_state: DeepDiveState::new(),
+        }
+    }
+}
+
 #[derive(Component, Deref, DerefMut)]
 struct AnimationTimer(Timer);
 
@@ -133,22 +155,7 @@ struct CurrentState(State);
 struct NextState(State);
 
 #[derive(Resource)]
-struct IntroData(IntroState);
-
-#[derive(Resource)]
-struct TechShopData(TechShopState);
-
-#[derive(Resource)]
-struct AlleywayData(AlleywayState);
-
-#[derive(Resource)]
-struct CyberwayData(CyberwayState);
-
-#[derive(Resource)]
-struct CafeData(CafeState);
-
-#[derive(Resource)]
-struct DeepDiveData(DeepDiveState);
+struct StateData(StateCollection);
 
 #[derive(Resource)]
 struct DeepDiveDataBank(u32);
@@ -157,12 +164,7 @@ impl Plugin for StatesPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(CurrentState(State::Cafe))
         .insert_resource(NextState(State::Intro))
-        .insert_resource(IntroData(IntroState::new()))
-        .insert_resource(TechShopData(TechShopState::new()))
-        .insert_resource(AlleywayData(AlleywayState::new()))
-        .insert_resource(CyberwayData(CyberwayState::new()))
-        .insert_resource(CafeData(CafeState::new()))
-        .insert_resource(DeepDiveData(DeepDiveState::new()))
+        .insert_resource(StateData(StateCollection::new()))
         .insert_resource(DeepDiveDataBank(0))
         .add_startup_system(start_initial_state)
         .add_system_set(
@@ -1162,31 +1164,26 @@ fn run_current_game_state(
     mut deep_dive_data_bank: ResMut<DeepDiveDataBank>,
 
     current_state: Res<CurrentState>,
-    mut intro_state: ResMut<IntroData>,
-    mut tech_shop_state: ResMut<TechShopData>,
-    mut alleyway_state: ResMut<AlleywayData>,
-    mut cyberway_state: ResMut<CyberwayData>,
-    mut cafe_state: ResMut<CafeData>,
-    mut deep_dive_state: ResMut<DeepDiveData>,
+    mut states: ResMut<StateData>,
 ) {
     match current_state.0 {
         State::Intro => {
-            intro_state.0.run(keyboard_input, next_state, story_query);
+            states.0.intro_state.run(keyboard_input, next_state, story_query);
         },
         State::TechShop => {
-            tech_shop_state.0.run(keyboard_input, next_state, player_query, story_query);
+            states.0.tech_shop_state.run(keyboard_input, next_state, player_query, story_query);
         },
         State::Alleyway => {
-            alleyway_state.0.run(keyboard_input, next_state, player_query, story_query);
+            states.0.alleyway_state.run(keyboard_input, next_state, player_query, story_query);
         },
         State::Cyberway => {
-            cyberway_state.0.run(keyboard_input, next_state, player_query, story_query);
+            states.0.cyberway_state.run(keyboard_input, next_state, player_query, story_query);
         },
         State::Cafe => {
-            cafe_state.0.run(keyboard_input, next_state, player_query, story_query);
+            states.0.cafe_state.run(keyboard_input, next_state, player_query, story_query);
         },
         State::DeepDive => {
-            deep_dive_state.0.run(keyboard_input, next_state, player_query, wall_query, lava_query, data_query, portal_query, deep_dive_data_bank);
+            states.0.deep_dive_state.run(keyboard_input, next_state, player_query, wall_query, lava_query, data_query, portal_query, deep_dive_data_bank);
         }
     }
 }
@@ -1195,12 +1192,7 @@ fn start_initial_state(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     current_state: Res<CurrentState>,
-    mut intro_state: ResMut<IntroData>,
-    mut tech_shop_state: ResMut<TechShopData>,
-    mut alleyway_state: ResMut<AlleywayData>,
-    mut cyberway_state: ResMut<CyberwayData>,
-    mut cafe_state: ResMut<CafeData>,
-    mut deep_dive_state: ResMut<DeepDiveData>,
+    mut states: ResMut<StateData>,
 
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
 
@@ -1208,22 +1200,22 @@ fn start_initial_state(
 ) {
     match current_state.0 {
         State::Intro => {
-            intro_state.0.start(&mut commands, &asset_server);
+            states.0.intro_state.start(&mut commands, &asset_server);
         },
         State::TechShop => {
-            tech_shop_state.0.start(&mut commands, &asset_server, &mut texture_atlases);
+            states.0.tech_shop_state.start(&mut commands, &asset_server, &mut texture_atlases);
         },
         State::Alleyway => {
-            alleyway_state.0.start(&mut commands, &asset_server, &mut texture_atlases);
+            states.0.alleyway_state.start(&mut commands, &asset_server, &mut texture_atlases);
         },
         State::Cyberway => {
-            cyberway_state.0.start(&mut commands, &asset_server, &mut texture_atlases);
+            states.0.cyberway_state.start(&mut commands, &asset_server, &mut texture_atlases);
         },
         State::Cafe => {
-            cafe_state.0.start(&mut commands, &asset_server, &mut texture_atlases);
+            states.0.cafe_state.start(&mut commands, &asset_server, &mut texture_atlases);
         },
         State::DeepDive => {
-            deep_dive_state.0.start(&mut commands, &asset_server, &mut texture_atlases, deep_dive_data_bank);
+            states.0.deep_dive_state.start(&mut commands, &asset_server, &mut texture_atlases, deep_dive_data_bank);
         }
     }
 }
@@ -1231,12 +1223,7 @@ fn start_initial_state(
 fn manage_state_changes(
     next_state: ResMut<NextState>,
     mut current_state: ResMut<CurrentState>,
-    mut intro_state: ResMut<IntroData>,
-    mut tech_shop_state: ResMut<TechShopData>,
-    mut alleyway_state: ResMut<AlleywayData>,
-    mut cyberway_state: ResMut<CyberwayData>,
-    mut cafe_state: ResMut<CafeData>,
-    mut deep_dive_state: ResMut<DeepDiveData>,
+    mut states: ResMut<StateData>,
 
     mut deep_dive_data_bank: ResMut<DeepDiveDataBank>,
 
@@ -1250,59 +1237,59 @@ fn manage_state_changes(
 
         match (&current_state.0, &next_state.0) {
             (State::Intro, State::TechShop) => {
-                intro_state.0.close(&mut commands, &mut entity_query);
+                states.0.intro_state.close(&mut commands, &mut entity_query);
                 current_state.0 = State::TechShop;
-                tech_shop_state.0.start(&mut commands, &asset_server, &mut texture_atlases);
+                states.0.tech_shop_state.start(&mut commands, &asset_server, &mut texture_atlases);
             },
             (State::TechShop, State::Alleyway) => {
-                tech_shop_state.0.close(&mut commands, &mut entity_query);
+                states.0.tech_shop_state.close(&mut commands, &mut entity_query);
                 current_state.0 = State::Alleyway;
-                alleyway_state.0.start(&mut commands, &asset_server, &mut texture_atlases);
+                states.0.alleyway_state.start(&mut commands, &asset_server, &mut texture_atlases);
             },
             (State::Alleyway, State::TechShop) => {
-                alleyway_state.0.close(&mut commands, &mut entity_query);
+                states.0.alleyway_state.close(&mut commands, &mut entity_query);
                 current_state.0 = State::TechShop;
-                tech_shop_state.0.start(&mut commands, &asset_server, &mut texture_atlases);
+                states.0.tech_shop_state.start(&mut commands, &asset_server, &mut texture_atlases);
             },
             (State::Alleyway, State::Cyberway) => {
-                alleyway_state.0.close(&mut commands, &mut entity_query);
+                states.0.alleyway_state.close(&mut commands, &mut entity_query);
                 current_state.0 = State::Cyberway;
-                cyberway_state.0.spawn_x = -580.0;
-                cyberway_state.0.start(&mut commands, &asset_server, &mut texture_atlases);
+                states.0.cyberway_state.spawn_x = -580.0;
+                states.0.cyberway_state.start(&mut commands, &asset_server, &mut texture_atlases);
             },
             (State::Cyberway, State::Cafe) => {
-                cyberway_state.0.close(&mut commands, &mut entity_query);
+                states.0.cyberway_state.close(&mut commands, &mut entity_query);
                 current_state.0 = State::Cafe;
                 println!("Here");
-                cafe_state.0.start(&mut commands, &asset_server, &mut texture_atlases);
+                states.0.cafe_state.start(&mut commands, &asset_server, &mut texture_atlases);
             },
             (State::Cyberway, State::Alleyway) => {
-                cyberway_state.0.close(&mut commands, &mut entity_query);
+                states.0.cyberway_state.close(&mut commands, &mut entity_query);
                 current_state.0 = State::Alleyway;
                 // cyberway_state.0.spawn_x = 400.0;
-                alleyway_state.0.start(&mut commands, &asset_server, &mut texture_atlases);
+                states.0.alleyway_state.start(&mut commands, &asset_server, &mut texture_atlases);
             },
             (State::Cafe, State::Cyberway) => {
-                cafe_state.0.close(&mut commands, &mut entity_query);
+                states.0.cafe_state.close(&mut commands, &mut entity_query);
                 current_state.0 = State::Cyberway;
-                cyberway_state.0.spawn_x = 400.0;
-                cyberway_state.0.start(&mut commands, &asset_server, &mut texture_atlases);
+                states.0.cyberway_state.spawn_x = 400.0;
+                states.0.cyberway_state.start(&mut commands, &asset_server, &mut texture_atlases);
             },
 
             (State::TechShop, State::DeepDive) => {
-                tech_shop_state.0.close(&mut commands, &mut entity_query);
+                states.0.tech_shop_state.close(&mut commands, &mut entity_query);
                 current_state.0 = State::DeepDive;
-                deep_dive_state.0.start(&mut commands, &asset_server, &mut texture_atlases, deep_dive_data_bank);
+                states.0.deep_dive_state.start(&mut commands, &asset_server, &mut texture_atlases, deep_dive_data_bank);
             }
             (State::DeepDive, State::TechShop) => {
-                deep_dive_state.0.close(&mut commands, &mut entity_query);
+                states.0.deep_dive_state.close(&mut commands, &mut entity_query);
                 current_state.0 = State::TechShop;
-                tech_shop_state.0.start(&mut commands, &asset_server, &mut texture_atlases);
+                states.0.tech_shop_state.start(&mut commands, &asset_server, &mut texture_atlases);
             },
             (State::DeepDive, State::DeepDive) => {
-                deep_dive_state.0.close(&mut commands, &mut entity_query);
+                states.0.deep_dive_state.close(&mut commands, &mut entity_query);
                 current_state.0 = State::DeepDive;
-                deep_dive_state.0.start(&mut commands, &asset_server, &mut texture_atlases, deep_dive_data_bank);
+                states.0.deep_dive_state.start(&mut commands, &asset_server, &mut texture_atlases, deep_dive_data_bank);
             },
             _ => ()
         }
