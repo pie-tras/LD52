@@ -61,7 +61,9 @@ impl DeepDiveState {
 struct StoryText;
 
 #[derive(Component)]
-struct Player;
+struct Player {
+    velocity: Vec2
+}
 
 #[derive(Component)]
 struct Collider;
@@ -74,9 +76,6 @@ struct DataPort;
 
 #[derive(Component)]
 struct Portal;
-
-#[derive(Component, Deref, DerefMut)]
-struct Velocity(Vec2);
 
 #[derive(Resource)]
 struct CurrentState(State);
@@ -348,16 +347,19 @@ impl DeepDiveState {
                 transform,
                 ..default()
             }, 
-            Player,
-            Velocity(Vec2::new(0.0, 0.0)),
+            Player {
+                velocity: Vec2::new(0.0, 0.0),
+            }
         ));
+
+        println!("Created player")
     }
 
     fn run(
         &mut self,
         keyboard_input: Res<Input<KeyCode>>,
         mut next_state: ResMut<NextState>,
-        mut player_query: Query<(&mut Transform, &mut Velocity), With<Player>>,
+        mut player_query: Query<(&mut Transform, &mut Player), With<Player>>,
         wall_query: Query<&Transform, (Without<Player>, With<Collider>)>,
         lava_query: Query<&Transform, (Without<Player>, With<Lava>)>,
         data_query: Query<&Transform, (Without<Player>, With<DataPort>)>,
@@ -365,36 +367,36 @@ impl DeepDiveState {
 
         mut deep_dive_data_bank: ResMut<DeepDiveDataBank>,
     ) {
-        let (mut player_transform, mut player_velocity) = player_query.single_mut();
-
-        if player_velocity.x == 0.0 && player_velocity.y == 0.0 {
-            if keyboard_input.just_pressed(KeyCode::A) {
-                player_velocity.x = -DEEP_DIVE_TILE_SCALE;
-            } else if keyboard_input.just_pressed(KeyCode::W) {
-                player_velocity.y = DEEP_DIVE_TILE_SCALE;
-            } else if keyboard_input.just_pressed(KeyCode::S) {
-                player_velocity.y = -DEEP_DIVE_TILE_SCALE;
-            } else if keyboard_input.just_pressed(KeyCode::D) {
-                player_velocity.x = DEEP_DIVE_TILE_SCALE;
+        if let (mut player_transform, mut player) = player_query.single_mut() {
+            if player.velocity.x == 0.0 && player.velocity.y == 0.0 {
+                if keyboard_input.just_pressed(KeyCode::A) {
+                    player.velocity.x = -DEEP_DIVE_TILE_SCALE;
+                } else if keyboard_input.just_pressed(KeyCode::W) {
+                    player.velocity.y = DEEP_DIVE_TILE_SCALE;
+                } else if keyboard_input.just_pressed(KeyCode::S) {
+                    player.velocity.y = -DEEP_DIVE_TILE_SCALE;
+                } else if keyboard_input.just_pressed(KeyCode::D) {
+                    player.velocity.x = DEEP_DIVE_TILE_SCALE;
+                }
             }
-        }
-
-        let target = Vec3::new(player_transform.translation.x + player_velocity.x,
-            player_transform.translation.y + player_velocity.y, 0.0);
-
-        if dive_collision_check(target, &wall_query, &lava_query, &data_query, &portal_query, &mut self.level, &mut deep_dive_data_bank, &mut next_state) {
-            player_transform.translation = target;
-        } else {
-            player_velocity.x = 0.0;
-            player_velocity.y = 0.0;
-        }
-
-        if keyboard_input.just_pressed(KeyCode::Escape) {
-            println!("MENU")
-        }
-
-        if keyboard_input.just_pressed(KeyCode::P) {
-            next_state.0 = State::World;
+    
+            let target = Vec3::new(player_transform.translation.x + player.velocity.x,
+                player_transform.translation.y + player.velocity.y, 0.0);
+    
+            if dive_collision_check(target, &wall_query, &lava_query, &data_query, &portal_query, &mut self.level, &mut deep_dive_data_bank, &mut next_state) {
+                player_transform.translation = target;
+            } else {
+                player.velocity.x = 0.0;
+                player.velocity.y = 0.0;
+            }
+    
+            if keyboard_input.just_pressed(KeyCode::Escape) {
+                println!("MENU")
+            }
+    
+            if keyboard_input.just_pressed(KeyCode::P) {
+                next_state.0 = State::World;
+            }
         }
     }
 
@@ -416,7 +418,7 @@ fn run_current_game_state(
 
     story_query: Query<&mut Text, With<StoryText>>,
   
-    mut player_query: Query<(&mut Transform, &mut Velocity), With<Player>>,
+    mut player_query: Query<(&mut Transform, &mut Player), With<Player>>,
     wall_query: Query<&Transform, (Without<Player>, With<Collider>)>,
     lava_query: Query<&Transform, (Without<Player>, With<Lava>)>,
     data_query: Query<&Transform, (Without<Player>, With<DataPort>)>,
