@@ -18,7 +18,7 @@ fn main() {
 }
 
 fn setup(
-    mut commands: Commands
+    mut commands: Commands,
 ) {
     commands.spawn(Camera2dBundle {
         camera_2d: Camera2d {
