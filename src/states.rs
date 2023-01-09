@@ -21,6 +21,7 @@ enum State {
     TechShop,
     Alleyway,
     Cyberway,
+    PartsShop,
     Cafe,
     Pod,
     Alleyway2,
@@ -89,6 +90,23 @@ struct CyberwayState {
     enter_alleyway2: String,
 
     spawn_x: f32,
+    bounds: Vec2,
+}
+
+struct PartsShop {
+    talking_entity: Entity,
+    current_talking: u32,
+    has_played_msg: bool,
+    has_moved: bool,
+    current_msg: String,
+    talking: bool,
+    dialog_line: usize,
+    dialog_state: u32,
+    dialog_texts: Vec<String>,
+
+    location_string: String,
+    cyberway_door: String,
+
     bounds: Vec2,
 }
 
@@ -232,6 +250,27 @@ impl CyberwayState {
     }
 }
 
+impl PartsShop {
+    fn new() -> Self {
+        PartsShop {
+            talking_entity: Entity::from_raw(0),
+            current_talking: 0,
+            has_played_msg: false,
+            has_moved: false,
+            current_msg: String::from(""),
+            talking: false,
+            dialog_line: 0,
+            dialog_state: 0,
+            dialog_texts: Vec::new(),
+
+            location_string: String::from("Location: Cyber Parts Shop."),
+            cyberway_door: String::from("Press [W] to enter the Cyberway."),
+
+            bounds: Vec2::new(-275.0, 275.0),
+        }
+    }
+}
+
 impl CafeState {
     fn new() -> Self {
         CafeState {
@@ -312,6 +351,7 @@ struct StateCollection {
     tech_shop_state: TechShopState,
     alleyway_state: AlleywayState,
     cyberway_state: CyberwayState,
+    parts_shop_state: PartsShop,
     cafe_state: CafeState,
     pod_state: PodState,
     alleyway2_state: Alleyway2State,
@@ -325,6 +365,7 @@ impl StateCollection {
             tech_shop_state: TechShopState::new(),
             alleyway_state: AlleywayState::new(),
             cyberway_state: CyberwayState::new(),
+            parts_shop_state: PartsShop::new(),
             cafe_state: CafeState::new(),
             pod_state: PodState::new(),
             alleyway2_state: Alleyway2State::new(),
@@ -824,7 +865,7 @@ impl CyberwayState {
                             self.current_msg = self.parts_shop_door.clone();
                         }
                         if keyboard_input.just_pressed(KeyCode::W) {
-                           // next_state.0 = State::PartsShop;
+                            next_state.0 = State::PartsShop;
                         } 
                     } else  if target.x > 440.0 && target.x < 520.0 && !moved {
                         commands.entity(self.talking_entity).despawn();
@@ -869,6 +910,123 @@ impl CyberwayState {
                     self.has_played_msg = update_msg(&self.current_msg, &mut text);
                 }
             }
+
+            target.x = target.x.clamp(self.bounds.x, self.bounds.y);
+            player_transform.translation = target;
+        }
+    }
+
+    fn close(
+        &mut self,
+        commands: &mut Commands,
+        entity_query: &mut Query<Entity, Without<Camera>>,
+    ) {
+        println!("close world");
+        for entity in entity_query.iter() {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+impl PartsShop {
+    fn start(
+        &mut self,
+        commands: &mut Commands,
+        asset_server: &Res<AssetServer>,
+        texture_atlases: &mut ResMut<Assets<TextureAtlas>>,
+    ) {
+        println!("Start cafe");
+
+        self.talking_entity = Entity::from_raw(0);
+        self.current_talking = 0;
+        self.has_played_msg = false;
+        self.has_moved = false;
+        self.current_msg = self.location_string.clone();
+        self.talking = false;
+        self.dialog_line = 0;
+
+        spawn_player(commands, &asset_server, texture_atlases, 0.0);
+        spawn_background(commands, &asset_server, State::PartsShop, 23.0);
+        self.talking_entity = spawn_text_box(commands, &asset_server);
+        spawn_story_text(commands, &asset_server);
+    }
+
+    fn run(
+        &mut self,
+        commands: &mut Commands,
+        asset_server: &Res<AssetServer>,
+        keyboard_input: Res<Input<KeyCode>>,
+        mut next_state: ResMut<NextState>,
+        mut player_query: Query<(&mut TextureAtlasSprite, &mut AnimationTimer, &mut Transform, &mut Player), With<Player>>,
+        mut story_query: Query<&mut Text, With<StoryText>>,
+        npc_query: Query<(&NPC, &Transform), (Without<Player>, With<NPC>)>,
+    ) {
+        for (mut sprite, mut timer, mut player_transform, mut player) in player_query.iter_mut() {
+
+            let (mut target, mut moved) = move_player(&keyboard_input, &mut sprite, &mut timer, &mut player_transform, &mut player);
+            if target.x < self.bounds.x - BORDER_MARGIN || target.x > self.bounds.y + BORDER_MARGIN {
+                target.x = 0.0;
+                moved = false;
+            }
+
+            if moved {
+                self.has_moved = true;
+                self.talking = false;
+                commands.entity(self.talking_entity).despawn();
+                self.talking_entity = spawn_talking_entity(commands, &asset_server, 0);
+                self.dialog_line = 0;
+                self.dialog_texts.clear();
+            }
+
+            let mut queue_clear = false;
+
+            let npc = npc_collision_check(target, &npc_query);
+
+            if self.has_moved {
+                if npc != -1 && !moved {
+
+                    if keyboard_input.just_pressed(KeyCode::Space) {
+                        self.talking = true;
+
+                        (self.dialog_state, self.dialog_line, self.talking_entity) =
+                        manage_dialog(commands, &asset_server,
+                                    State::PartsShop,
+                                    npc as u32,
+                                    self.talking_entity,
+                                    self.dialog_state,
+                                    self.dialog_line,
+                                    &mut self.dialog_texts,
+                                    &mut self.current_msg,
+                        );
+
+                        queue_clear = true;
+                    }
+                } else {
+                    if target.x < -180.0 && !moved {
+                        commands.entity(self.talking_entity).despawn();
+                        self.talking_entity = spawn_talking_entity(commands, &asset_server, 1);
+
+                        if !self.current_msg.eq(&self.cyberway_door) {
+                            self.current_msg = self.cyberway_door.clone();
+                        }
+                        if keyboard_input.just_pressed(KeyCode::W) {
+                            next_state.0 = State::Cyberway;
+                        } 
+                    } else if self.has_played_msg {
+                        queue_clear = true;
+                    }
+                }
+            }
+
+            for mut text in &mut story_query {
+                if queue_clear && (self.talking || self.has_played_msg) {
+                    clear_msg(&self.current_msg, &mut text);
+                } else {
+                    self.has_played_msg = update_msg(&self.current_msg, &mut text);
+                }
+            }
+
+            println!("{}", target.x);
 
             target.x = target.x.clamp(self.bounds.x, self.bounds.y);
             player_transform.translation = target;
@@ -1457,6 +1615,9 @@ fn run_current_game_state(
         State::Cyberway => {
             states.0.cyberway_state.run(&mut commands, &asset_server, keyboard_input, next_state, player_query, story_query, npc_query);
         },
+        State::PartsShop => {
+            states.0.parts_shop_state.run(&mut commands, &asset_server, keyboard_input, next_state, player_query, story_query, npc_query);
+        },
         State::Cafe => {
             states.0.cafe_state.run(&mut commands, &asset_server, keyboard_input, next_state, player_query, story_query, npc_query);
         },
@@ -1494,6 +1655,9 @@ fn start_initial_state(
         },
         State::Cyberway => {
             states.0.cyberway_state.start(&mut commands, &asset_server, &mut texture_atlases, 0.0);
+        },
+        State::PartsShop => {
+            states.0.parts_shop_state.start(&mut commands, &asset_server, &mut texture_atlases);
         },
         State::Cafe => {
             states.0.cafe_state.start(&mut commands, &asset_server, &mut texture_atlases);
@@ -1562,6 +1726,17 @@ fn manage_state_changes(
                 states.0.cyberway_state.close(&mut commands, &mut entity_query);
                 current_state.0 = State::Alleyway2;
                 states.0.alleyway2_state.start(&mut commands, &asset_server, &mut texture_atlases);
+            },
+            (State::Cyberway, State::PartsShop) => {
+                states.0.cyberway_state.close(&mut commands, &mut entity_query);
+                current_state.0 = State::PartsShop;
+                states.0.parts_shop_state.start(&mut commands, &asset_server, &mut texture_atlases);
+            },
+
+            (State::PartsShop, State::Cyberway) => {
+                states.0.parts_shop_state.close(&mut commands, &mut entity_query);
+                current_state.0 = State::Cyberway;
+                states.0.cyberway_state.start(&mut commands, &asset_server, &mut texture_atlases, -250.0);
             },
 
             (State::Alleyway2, State::Cyberway) => {
@@ -1892,6 +2067,7 @@ fn spawn_background(
         State::TechShop => asset_server.load("textures/tech_shop.png"),
         State::Alleyway => asset_server.load("textures/alleyway.png"),
         State::Cyberway => asset_server.load("textures/cyberway.png"),
+        State::PartsShop => asset_server.load("textures/cyberparts.png"),
         State::Cafe => asset_server.load("textures/cafe.png"),
         State::Pod => asset_server.load("textures/pods.png"),
         State::Alleyway2 => asset_server.load("textures/alleyway2.png"),
@@ -2005,6 +2181,7 @@ fn manage_dialog(
         State::TechShop => "tech_shop",
         State::Alleyway => "alleyway",
         State::Cyberway => "cyberway",
+        State::PartsShop => "parts_shop",
         State::Cafe => "cafe",
         State::Pod => "pod",
         State::Alleyway2 => "alleyway2",
