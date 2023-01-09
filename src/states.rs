@@ -8,7 +8,7 @@ use bevy::{
 
 const TIME_STEP: f32 = 1.0 / 60.0;
 
-const DEEP_DIVE_TILE_SCALE: f32 = 16.0;
+const DEEP_DIVE_TILE_SCALE: f32 = 64.0;
 
 const PLAYER_SPEED: f32 = 6.0;
 
@@ -28,13 +28,27 @@ enum State {
     DeepDive,
 }
 
+#[derive(Clone, PartialEq)]
+enum GameProgress {
+    Start,
+    TalkToFigure,
+    GetFirstKey,
+    GetFirstData,
+    GetSecondKey,
+    GetSecondData,
+    GetFinalKey,
+    GetFinalData,
+}
+
 struct IntroState {
+    check_progress: GameProgress,
     current_text: String,
     story_texts: Vec<String>,
     current_story_line: usize,
 }
 
 struct TechShopState {
+    check_progress: GameProgress,
     talking_entity: Entity,
     current_talking: u32,
     has_played_msg: bool,
@@ -54,6 +68,7 @@ struct TechShopState {
 }
 
 struct AlleywayState {
+    check_progress: GameProgress,
     talking_entity: Entity,
     current_talking: u32,
     has_played_msg: bool,
@@ -73,6 +88,7 @@ struct AlleywayState {
 }
 
 struct CyberwayState {
+    check_progress: GameProgress,
     talking_entity: Entity,
     current_talking: u32,
     has_played_msg: bool,
@@ -94,6 +110,7 @@ struct CyberwayState {
 }
 
 struct PartsShop {
+    check_progress: GameProgress,
     talking_entity: Entity,
     current_talking: u32,
     has_played_msg: bool,
@@ -111,6 +128,7 @@ struct PartsShop {
 }
 
 struct CafeState {
+    check_progress: GameProgress,
     talking_entity: Entity,
     current_talking: u32,
     has_played_msg: bool,
@@ -130,6 +148,7 @@ struct CafeState {
 }
 
 struct PodState {
+    check_progress: GameProgress,
     talking_entity: Entity,
     current_talking: u32,
     has_played_msg: bool,
@@ -148,6 +167,7 @@ struct PodState {
 }
 
 struct Alleyway2State {
+    check_progress: GameProgress,
     talking_entity: Entity,
     current_talking: u32,
     has_played_msg: bool,
@@ -166,12 +186,14 @@ struct Alleyway2State {
 }
 
 struct DeepDiveState {
+    check_progress: GameProgress,
     level: u32
 }
 
 impl IntroState {
     fn new() -> Self {
         IntroState {
+            check_progress: GameProgress::Start,
             current_text: String::from(""),
             story_texts: Vec::new(),
             current_story_line: 0,
@@ -182,6 +204,7 @@ impl IntroState {
 impl TechShopState {
     fn new() -> Self {
         TechShopState {
+            check_progress: GameProgress::Start,
             talking_entity: Entity::from_raw(0),
             current_talking: 0,
             has_played_msg: false,
@@ -205,6 +228,7 @@ impl TechShopState {
 impl AlleywayState {
     fn new() -> Self {
         AlleywayState {
+            check_progress: GameProgress::Start,
             talking_entity: Entity::from_raw(0),
             current_talking: 0,
             has_played_msg: false,
@@ -228,6 +252,7 @@ impl AlleywayState {
 impl CyberwayState {
     fn new() -> Self {
         CyberwayState {
+            check_progress: GameProgress::Start,
             talking_entity: Entity::from_raw(0),
             current_talking: 0,
             has_played_msg: false,
@@ -253,6 +278,7 @@ impl CyberwayState {
 impl PartsShop {
     fn new() -> Self {
         PartsShop {
+            check_progress: GameProgress::Start,
             talking_entity: Entity::from_raw(0),
             current_talking: 0,
             has_played_msg: false,
@@ -274,6 +300,7 @@ impl PartsShop {
 impl CafeState {
     fn new() -> Self {
         CafeState {
+            check_progress: GameProgress::Start,
             talking_entity: Entity::from_raw(0),
             current_talking: 0,
             has_played_msg: false,
@@ -297,6 +324,7 @@ impl CafeState {
 impl PodState {
     fn new() -> Self {
         PodState {
+            check_progress: GameProgress::Start,
             talking_entity: Entity::from_raw(0),
             current_talking: 0,
             has_played_msg: false,
@@ -319,6 +347,7 @@ impl PodState {
 impl Alleyway2State {
     fn new() -> Self {
         Alleyway2State {
+            check_progress: GameProgress::Start,
             talking_entity: Entity::from_raw(0),
             current_talking: 0,
             has_played_msg: false,
@@ -341,12 +370,14 @@ impl Alleyway2State {
 impl DeepDiveState {
     fn new() -> Self {
         DeepDiveState {
+            check_progress: GameProgress::Start,
             level: 0
         }
     }
 }
 
 struct StateCollection {
+    game_progress: GameProgress,
     intro_state: IntroState,
     tech_shop_state: TechShopState,
     alleyway_state: AlleywayState,
@@ -361,6 +392,7 @@ struct StateCollection {
 impl StateCollection {
     fn new() -> Self {
         StateCollection {
+            game_progress: GameProgress::Start,
             intro_state: IntroState::new(),
             tech_shop_state: TechShopState::new(),
             alleyway_state: AlleywayState::new(),
@@ -434,9 +466,12 @@ impl Plugin for StatesPlugin {
 impl IntroState {
     fn start(
         &mut self,
+        game_progress: GameProgress,
         commands: &mut Commands,
         asset_server: &Res<AssetServer>
     ) {
+        self.check_progress = game_progress;
+
         self.current_story_line = 0;
 
         println!("Start intro");
@@ -520,23 +555,28 @@ impl IntroState {
         &mut self,
         commands: &mut Commands,
         entity_query: &mut Query<Entity, Without<Camera>>,
-    ) {
+    ) -> GameProgress {
         println!("close intro");
         for entity in entity_query.iter() {
             commands.entity(entity).despawn();
         }
 
         self.story_texts.clear();
+
+        self.check_progress.clone()
     }
 }
 
 impl TechShopState {
     fn start(
         &mut self,
+        game_progress: GameProgress,
         commands: &mut Commands,
         asset_server: &Res<AssetServer>,
         texture_atlases: &mut ResMut<Assets<TextureAtlas>>,
     ) {
+        self.check_progress = game_progress;
+
         self.talking_entity = Entity::from_raw(0);
         self.current_talking = 0;
         self.has_played_msg = false;
@@ -603,6 +643,7 @@ impl TechShopState {
                         (self.dialog_state, self.dialog_line, self.talking_entity) =
                         manage_dialog(commands, &asset_server,
                                     State::TechShop,
+                                    self.check_progress.clone(),
                                     npc as u32,
                                     self.talking_entity,
                                     self.dialog_state,
@@ -647,21 +688,26 @@ impl TechShopState {
         &mut self,
         commands: &mut Commands,
         entity_query: &mut Query<Entity, Without<Camera>>,
-    ) {
+    ) -> GameProgress {
         for entity in entity_query.iter() {
             commands.entity(entity).despawn();
         }
+
+        self.check_progress.clone()
     }
 }
 
 impl AlleywayState {
     fn start(
         &mut self,
+        game_progress: GameProgress,
         commands: &mut Commands,
         asset_server: &Res<AssetServer>,
         texture_atlases: &mut ResMut<Assets<TextureAtlas>>,
         spawn_x: f32,
     ) {
+        self.check_progress = game_progress;
+
         self.talking_entity = Entity::from_raw(0);
         self.current_talking = 0;
         self.has_played_msg = false;
@@ -722,6 +768,7 @@ impl AlleywayState {
                         (self.dialog_state, self.dialog_line, self.talking_entity) =
                         manage_dialog(commands, &asset_server,
                                     State::Alleyway,
+                                    self.check_progress.clone(),
                                     npc as u32,
                                     self.talking_entity,
                                     self.dialog_state,
@@ -776,22 +823,33 @@ impl AlleywayState {
         &mut self,
         commands: &mut Commands,
         entity_query: &mut Query<Entity, Without<Camera>>,
-    ) {
+    ) -> GameProgress {
         for entity in entity_query.iter() {
             commands.entity(entity).despawn();
         }
+
+        if self.dialog_state != 0 {
+            match &self.check_progress {
+                Start => self.check_progress = GameProgress::TalkToFigure,
+                _ => (),
+            }
+        }
+
+        self.check_progress.clone()
     }
 }
 
 impl CyberwayState {
     fn start(
         &mut self,
+        game_progress: GameProgress,
         commands: &mut Commands,
         asset_server: &Res<AssetServer>,
         texture_atlases: &mut ResMut<Assets<TextureAtlas>>,
         spawn_x: f32,
     ) {
         println!("Start cyberway");
+        self.check_progress = game_progress;
 
         self.talking_entity = Entity::from_raw(0);
         self.current_talking = 0;
@@ -846,6 +904,7 @@ impl CyberwayState {
                         (self.dialog_state, self.dialog_line, self.talking_entity) =
                         manage_dialog(commands, &asset_server,
                                     State::Alleyway,
+                                    self.check_progress.clone(),
                                     npc as u32,
                                     self.talking_entity,
                                     self.dialog_state,
@@ -920,22 +979,26 @@ impl CyberwayState {
         &mut self,
         commands: &mut Commands,
         entity_query: &mut Query<Entity, Without<Camera>>,
-    ) {
+    ) -> GameProgress {
         println!("close world");
         for entity in entity_query.iter() {
             commands.entity(entity).despawn();
         }
+
+        self.check_progress.clone()
     }
 }
 
 impl PartsShop {
     fn start(
         &mut self,
+        game_progress: GameProgress,
         commands: &mut Commands,
         asset_server: &Res<AssetServer>,
         texture_atlases: &mut ResMut<Assets<TextureAtlas>>,
     ) {
         println!("Start cafe");
+        self.check_progress = game_progress;
 
         self.talking_entity = Entity::from_raw(0);
         self.current_talking = 0;
@@ -991,6 +1054,7 @@ impl PartsShop {
                         (self.dialog_state, self.dialog_line, self.talking_entity) =
                         manage_dialog(commands, &asset_server,
                                     State::PartsShop,
+                                    self.check_progress.clone(),
                                     npc as u32,
                                     self.talking_entity,
                                     self.dialog_state,
@@ -1037,22 +1101,26 @@ impl PartsShop {
         &mut self,
         commands: &mut Commands,
         entity_query: &mut Query<Entity, Without<Camera>>,
-    ) {
+    ) -> GameProgress {
         println!("close world");
         for entity in entity_query.iter() {
             commands.entity(entity).despawn();
         }
+
+        self.check_progress.clone()
     }
 }
 
 impl CafeState {
     fn start(
         &mut self,
+        game_progress: GameProgress,
         commands: &mut Commands,
         asset_server: &Res<AssetServer>,
         texture_atlases: &mut ResMut<Assets<TextureAtlas>>,
     ) {
         println!("Start cafe");
+        self.check_progress = game_progress;
 
         self.talking_entity = Entity::from_raw(0);
         self.current_talking = 0;
@@ -1110,6 +1178,7 @@ impl CafeState {
                         (self.dialog_state, self.dialog_line, self.talking_entity) =
                         manage_dialog(commands, &asset_server,
                                     State::TechShop,
+                                    self.check_progress.clone(),
                                     npc as u32,
                                     self.talking_entity,
                                     self.dialog_state,
@@ -1164,22 +1233,26 @@ impl CafeState {
         &mut self,
         commands: &mut Commands,
         entity_query: &mut Query<Entity, Without<Camera>>,
-    ) {
+    ) -> GameProgress {
         println!("close world");
         for entity in entity_query.iter() {
             commands.entity(entity).despawn();
         }
+
+        self.check_progress.clone()
     }
 }
 
 impl PodState {
     fn start(
         &mut self,
+        game_progress: GameProgress,
         commands: &mut Commands,
         asset_server: &Res<AssetServer>,
         texture_atlases: &mut ResMut<Assets<TextureAtlas>>,
     ) {
         println!("Start cafe");
+        self.check_progress = game_progress;
         
         self.talking_entity = Entity::from_raw(0);
         self.current_talking = 0;
@@ -1235,6 +1308,7 @@ impl PodState {
                         (self.dialog_state, self.dialog_line, self.talking_entity) =
                         manage_dialog(commands, &asset_server,
                                     State::TechShop,
+                                    self.check_progress.clone(),
                                     npc as u32,
                                     self.talking_entity,
                                     self.dialog_state,
@@ -1257,15 +1331,30 @@ impl PodState {
                             next_state.0 = State::Cafe;
                         } 
                     } else if target.x > -60.0 && target.x < 190.0 && !moved {
-                        commands.entity(self.talking_entity).despawn();
-                        self.talking_entity = spawn_talking_entity(commands, &asset_server, 1);
 
-                        if !self.current_msg.eq(&self.enter_pod) {
-                            self.current_msg = self.enter_pod.clone();
+                        let has_key = match &self.check_progress {
+                            GameProgress::GetFirstKey => true,
+                            GameProgress::GetSecondKey => true,
+                            GameProgress::GetFinalKey => true,
+                            _ => false,
+                        };
+
+                        if has_key {
+                            commands.entity(self.talking_entity).despawn();
+                            self.talking_entity = spawn_talking_entity(commands, &asset_server, 1);
+    
+                            if !self.current_msg.eq(&self.enter_pod) {
+                                self.current_msg = self.enter_pod.clone();
+                            }
+                            if keyboard_input.just_pressed(KeyCode::W) {
+                                next_state.0 = State::DeepDive;
+                            } 
+                        } else {
+                            queue_clear = true;
+                            if self.current_msg.len() != 0 {
+                                self.current_msg = "".to_string();
+                            }
                         }
-                        if keyboard_input.just_pressed(KeyCode::W) {
-                            next_state.0 = State::DeepDive;
-                        } 
                     } else if self.has_played_msg {
                         queue_clear = true;
                     }
@@ -1289,22 +1378,26 @@ impl PodState {
         &mut self,
         commands: &mut Commands,
         entity_query: &mut Query<Entity, Without<Camera>>,
-    ) {
+    ) -> GameProgress {
         println!("close world");
         for entity in entity_query.iter() {
             commands.entity(entity).despawn();
         }
+
+        self.check_progress.clone()
     }
 }
 
 impl Alleyway2State {
     fn start(
         &mut self,
+        game_progress: GameProgress,
         commands: &mut Commands,
         asset_server: &Res<AssetServer>,
         texture_atlases: &mut ResMut<Assets<TextureAtlas>>,
     ) {
         println!("Start alleyway");
+        self.check_progress = game_progress.clone();
 
         self.talking_entity = Entity::from_raw(0);
         self.current_talking = 0;
@@ -1315,9 +1408,18 @@ impl Alleyway2State {
         self.dialog_line = 0;
 
         spawn_player(commands, &asset_server, texture_atlases, -450.0);
-        if self.dialog_state == 0 {
-            spawn_figure(commands, &asset_server, texture_atlases, 310.0);
+
+        match &game_progress {
+            GameProgress::Start => (),
+            GameProgress::GetFirstKey => (),
+            GameProgress::GetSecondKey => (),
+            GameProgress::GetFinalKey => (),
+            _ => {
+                self.dialog_state = 0;
+                spawn_figure(commands, &asset_server, texture_atlases, 310.0)
+            },
         }
+
         spawn_background(commands, &asset_server, State::Alleyway2, 78.0);
         self.talking_entity = spawn_text_box(commands, &asset_server);
         spawn_story_text(commands, &asset_server);
@@ -1366,6 +1468,7 @@ impl Alleyway2State {
                         (self.dialog_state, self.dialog_line, self.talking_entity) =
                         manage_dialog(commands, &asset_server,
                                     State::Alleyway2,
+                                    self.check_progress.clone(),
                                     npc as u32,
                                     self.talking_entity,
                                     self.dialog_state,
@@ -1410,23 +1513,36 @@ impl Alleyway2State {
         &mut self,
         commands: &mut Commands,
         entity_query: &mut Query<Entity, Without<Camera>>,
-    ) {
+    ) -> GameProgress {
         println!("close world");
         for entity in entity_query.iter() {
             commands.entity(entity).despawn();
         }
+
+        if self.dialog_state != 0 {
+            match &self.check_progress {
+                GameProgress::TalkToFigure => self.check_progress = GameProgress::GetFirstKey,
+                GameProgress::GetFirstData => self.check_progress = GameProgress::GetSecondKey,
+                GameProgress::GetSecondData => self.check_progress = GameProgress::GetFinalKey,
+                _ => (),
+            }
+        }
+
+        self.check_progress.clone()
     }
 }
 
 impl DeepDiveState {
     fn start(
         &mut self,
+        game_progress: GameProgress,
         commands: &mut Commands,
         asset_server: &Res<AssetServer>,
         texture_atlases: &mut ResMut<Assets<TextureAtlas>>,
         mut deep_dive_data_bank: ResMut<DeepDiveDataBank>,
     ) {
         println!("Start deep dive");
+        self.check_progress = game_progress;
 
         let mut tiles: Vec<Entity> = Vec::new();
         let mut map_lines: Vec<String> = Vec::new();
@@ -1505,7 +1621,7 @@ impl DeepDiveState {
             TextureAtlas::from_grid(texture_handle, Vec2::new(32.0, 32.0), 1, 8, None, None);
         let texture_atlas_handle = texture_atlases.add(texture_atlas);
 
-        let mut player_transform = Transform::from_scale(Vec3::splat(0.5));
+        let mut player_transform = Transform::from_scale(Vec3::splat(2.0));
         player_transform.translation.z = 100.0;
         let mut player_anim_timer = Timer::from_seconds(0.1, TimerMode::Repeating);
 
@@ -1574,11 +1690,13 @@ impl DeepDiveState {
         &mut self,
         commands: &mut Commands,
         entity_query: &mut Query<Entity, Without<Camera>>,
-    ) {
+    ) -> GameProgress {
         println!("close world");
         for entity in entity_query.iter() {
             commands.entity(entity).despawn();
         }
+
+        self.check_progress.clone()
     }
 }
 
@@ -1643,33 +1761,36 @@ fn start_initial_state(
 
     mut deep_dive_data_bank: ResMut<DeepDiveDataBank>,
 ) {
+
+    let mut game_progress = states.0.game_progress.clone();
+
     match current_state.0 {
         State::Intro => {
-            states.0.intro_state.start(&mut commands, &asset_server);
+            states.0.intro_state.start(game_progress, &mut commands, &asset_server);
         },
         State::TechShop => {
-            states.0.tech_shop_state.start(&mut commands, &asset_server, &mut texture_atlases);
+            states.0.tech_shop_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases);
         },
         State::Alleyway => {
-            states.0.alleyway_state.start(&mut commands, &asset_server, &mut texture_atlases, 0.0);
+            states.0.alleyway_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases, 0.0);
         },
         State::Cyberway => {
-            states.0.cyberway_state.start(&mut commands, &asset_server, &mut texture_atlases, 0.0);
+            states.0.cyberway_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases, 0.0);
         },
         State::PartsShop => {
-            states.0.parts_shop_state.start(&mut commands, &asset_server, &mut texture_atlases);
+            states.0.parts_shop_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases);
         },
         State::Cafe => {
-            states.0.cafe_state.start(&mut commands, &asset_server, &mut texture_atlases);
+            states.0.cafe_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases);
         },
         State::Pod => {
-            states.0.pod_state.start(&mut commands, &asset_server, &mut texture_atlases);
+            states.0.pod_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases);
         },
         State::Alleyway2 => {
-            states.0.alleyway2_state.start(&mut commands, &asset_server, &mut texture_atlases);
+            states.0.alleyway2_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases);
         },
         State::DeepDive => {
-            states.0.deep_dive_state.start(&mut commands, &asset_server, &mut texture_atlases, deep_dive_data_bank);
+            states.0.deep_dive_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases, deep_dive_data_bank);
         }
     }
 }
@@ -1691,97 +1812,138 @@ fn manage_state_changes(
 
         match (&current_state.0, &next_state.0) {
             (State::Intro, State::TechShop) => {
-                states.0.intro_state.close(&mut commands, &mut entity_query);
+                states.0.game_progress = states.0.intro_state.close(&mut commands, &mut entity_query);
+                let mut game_progress = states.0.game_progress.clone();
                 current_state.0 = State::TechShop;
-                states.0.tech_shop_state.start(&mut commands, &asset_server, &mut texture_atlases);
+                states.0.tech_shop_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases);
             },
+
             (State::TechShop, State::Alleyway) => {
-                states.0.tech_shop_state.close(&mut commands, &mut entity_query);
+                states.0.game_progress = states.0.tech_shop_state.close(&mut commands, &mut entity_query);
+                let mut game_progress = states.0.game_progress.clone();
                 current_state.0 = State::Alleyway;
-                states.0.alleyway_state.start(&mut commands, &asset_server, &mut texture_atlases, 210.0);
+                states.0.alleyway_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases, 210.0);
             },
 
             (State::Alleyway, State::TechShop) => {
-                states.0.alleyway_state.close(&mut commands, &mut entity_query);
+                states.0.game_progress = states.0.alleyway_state.close(&mut commands, &mut entity_query);
+                let mut game_progress = states.0.game_progress.clone();
                 current_state.0 = State::TechShop;
-                states.0.tech_shop_state.start(&mut commands, &asset_server, &mut texture_atlases);
+                states.0.tech_shop_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases);
             },
             (State::Alleyway, State::Cyberway) => {
-                states.0.alleyway_state.close(&mut commands, &mut entity_query);
+                states.0.game_progress = states.0.alleyway_state.close(&mut commands, &mut entity_query);
+                let mut game_progress = states.0.game_progress.clone();
                 current_state.0 = State::Cyberway;
-                states.0.cyberway_state.start(&mut commands, &asset_server, &mut texture_atlases, -580.0);
+                states.0.cyberway_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases, -580.0);
             },
 
             (State::Cyberway, State::Alleyway) => {
-                states.0.cyberway_state.close(&mut commands, &mut entity_query);
+                states.0.game_progress = states.0.cyberway_state.close(&mut commands, &mut entity_query);
+                let mut game_progress = states.0.game_progress.clone();
                 current_state.0 = State::Alleyway;
-                states.0.alleyway_state.start(&mut commands, &asset_server, &mut texture_atlases, 510.0);
+                states.0.alleyway_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases, 510.0);
             },
             (State::Cyberway, State::Cafe) => {
-                states.0.cyberway_state.close(&mut commands, &mut entity_query);
+                states.0.game_progress = states.0.cyberway_state.close(&mut commands, &mut entity_query);
+                let mut game_progress = states.0.game_progress.clone();
                 current_state.0 = State::Cafe;
-                states.0.cafe_state.start(&mut commands, &asset_server, &mut texture_atlases);
+                states.0.cafe_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases);
             },
             (State::Cyberway, State::Alleyway2) => {
-                states.0.cyberway_state.close(&mut commands, &mut entity_query);
+                states.0.game_progress = states.0.cyberway_state.close(&mut commands, &mut entity_query);
+                let mut game_progress = states.0.game_progress.clone();
                 current_state.0 = State::Alleyway2;
-                states.0.alleyway2_state.start(&mut commands, &asset_server, &mut texture_atlases);
+                states.0.alleyway2_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases);
             },
             (State::Cyberway, State::PartsShop) => {
-                states.0.cyberway_state.close(&mut commands, &mut entity_query);
+                states.0.game_progress = states.0.cyberway_state.close(&mut commands, &mut entity_query);
+                let mut game_progress = states.0.game_progress.clone();
                 current_state.0 = State::PartsShop;
-                states.0.parts_shop_state.start(&mut commands, &asset_server, &mut texture_atlases);
+                states.0.parts_shop_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases);
             },
 
             (State::PartsShop, State::Cyberway) => {
-                states.0.parts_shop_state.close(&mut commands, &mut entity_query);
+                states.0.game_progress = states.0.parts_shop_state.close(&mut commands, &mut entity_query);
+                let mut game_progress = states.0.game_progress.clone();
                 current_state.0 = State::Cyberway;
-                states.0.cyberway_state.start(&mut commands, &asset_server, &mut texture_atlases, -250.0);
+                states.0.cyberway_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases, -250.0);
             },
 
             (State::Alleyway2, State::Cyberway) => {
-                states.0.alleyway2_state.close(&mut commands, &mut entity_query);
+                states.0.game_progress = states.0.alleyway2_state.close(&mut commands, &mut entity_query);
+                let mut game_progress = states.0.game_progress.clone();
                 current_state.0 = State::Cyberway;
-                states.0.cyberway_state.start(&mut commands, &asset_server, &mut texture_atlases, 510.0);
+                states.0.cyberway_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases, 510.0);
             },
 
             (State::Cafe, State::Cyberway) => {
-                states.0.cafe_state.close(&mut commands, &mut entity_query);
+                states.0.game_progress = states.0.cafe_state.close(&mut commands, &mut entity_query);
+                let mut game_progress = states.0.game_progress.clone();
                 current_state.0 = State::Cyberway;
-                states.0.cyberway_state.spawn_x = 400.0;
-                states.0.cyberway_state.start(&mut commands, &asset_server, &mut texture_atlases, -300.0);
+                states.0.cyberway_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases, -300.0);
             },
             (State::Cafe, State::Pod) => {
-                states.0.cafe_state.close(&mut commands, &mut entity_query);
+                states.0.game_progress = states.0.cafe_state.close(&mut commands, &mut entity_query);
+                let mut game_progress = states.0.game_progress.clone();
                 current_state.0 = State::Pod;
-                states.0.pod_state.start(&mut commands, &asset_server, &mut texture_atlases);
+                states.0.pod_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases);
             },
-
 
             (State::Pod, State::DeepDive) => {
-                states.0.pod_state.close(&mut commands, &mut entity_query);
+                states.0.game_progress = states.0.pod_state.close(&mut commands, &mut entity_query);
+                let mut game_progress = states.0.game_progress.clone();
                 current_state.0 = State::DeepDive;
-                states.0.deep_dive_state.start(&mut commands, &asset_server, &mut texture_atlases, deep_dive_data_bank);
+                states.0.deep_dive_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases, deep_dive_data_bank);
             },
             (State::Pod, State::Cafe) => {
-                states.0.pod_state.close(&mut commands, &mut entity_query);
+                states.0.game_progress = states.0.pod_state.close(&mut commands, &mut entity_query);
+                let mut game_progress = states.0.game_progress.clone();
                 current_state.0 = State::Cafe;
-                states.0.cafe_state.start(&mut commands, &asset_server, &mut texture_atlases);
+                states.0.cafe_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases);
             },
 
             (State::DeepDive, State::DeepDive) => {
-                states.0.deep_dive_state.close(&mut commands, &mut entity_query);
+                states.0.game_progress = states.0.deep_dive_state.close(&mut commands, &mut entity_query);
+                let mut game_progress = states.0.game_progress.clone();
                 current_state.0 = State::DeepDive;
-                states.0.deep_dive_state.start(&mut commands, &asset_server, &mut texture_atlases, deep_dive_data_bank);
+                states.0.deep_dive_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases, deep_dive_data_bank);
             },
             (State::DeepDive, State::Pod) => {
-                states.0.deep_dive_state.close(&mut commands, &mut entity_query);
-                current_state.0 = State::Pod;
-                states.0.pod_state.start(&mut commands, &asset_server, &mut texture_atlases);
+                states.0.game_progress = states.0.deep_dive_state.close(&mut commands, &mut entity_query);
+
+                let mut dead = false;
+
+                match &states.0.game_progress {
+                    GameProgress::GetFirstKey => states.0.game_progress = GameProgress::GetFirstData,
+                    GameProgress::GetSecondKey => states.0.game_progress = GameProgress::GetSecondData,
+                    GameProgress::GetFinalKey => dead = true,
+                    _ => (),
+                }
+
+                let mut game_progress = states.0.game_progress.clone();
+
+                if dead {
+                    current_state.0 = State::Intro;
+                    states.0.intro_state.start(game_progress, &mut commands, &asset_server);
+                } else {
+                    current_state.0 = State::Pod;
+                    states.0.pod_state.start(game_progress, &mut commands, &asset_server, &mut texture_atlases);
+                }
             },
             _ => ()
         }
 
+        match &states.0.game_progress {
+            GameProgress::Start => println!("Start"),
+            GameProgress::TalkToFigure => println!("Talk"),
+            GameProgress::GetFirstKey => println!("First key"),
+            GameProgress::GetFirstData => println!("First data"),
+            GameProgress::GetSecondKey => println!("Second key"),
+            GameProgress::GetSecondData => println!("Second data"),
+            GameProgress::GetFinalKey => println!("Final key"),
+            GameProgress::GetFinalData => println!("Final data"),
+        }
     }
 }
 
@@ -2166,6 +2328,7 @@ fn manage_dialog(
     commands: &mut Commands,
     asset_server: &Res<AssetServer>,
     state: State,
+    game_progress: GameProgress,
     current_talking: u32,
 
     mut talking_entity: Entity,
@@ -2187,9 +2350,20 @@ fn manage_dialog(
         State::Alleyway2 => "alleyway2",
         _ => "PANIC",
     };
+
+    let folder_str = match game_progress {
+        GameProgress::Start => "start",
+        GameProgress::TalkToFigure => "talk",
+        GameProgress::GetFirstKey => "first_key",
+        GameProgress::GetFirstData => "first_data",
+        GameProgress::GetSecondKey => "second_key",
+        GameProgress::GetSecondData => "second_data",
+        GameProgress::GetFinalKey => "final_key",
+        GameProgress::GetFinalData => "final_data",
+    };
    
     if dialog_texts.len() == 0 {
-        let file_path = format!("assets/texts/{}/dialog{}-{}.txt", state_str, current_talking, dialog_state);
+        let file_path = format!("assets/texts/{}/{}/dialog{}-{}.txt", state_str, folder_str, current_talking, dialog_state);
         println!("{}", file_path);
         
         let raw_text = fs::read_to_string(file_path).expect("Cannot open dialog text!");
