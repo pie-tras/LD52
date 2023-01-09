@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use bevy::{prelude::*};
 
 use bevy::core_pipeline::clear_color::ClearColorConfig;
@@ -19,7 +21,13 @@ fn main() {
 
 fn setup(
     mut commands: Commands,
+    mut windows: ResMut<Windows>
 ) {
+    for mut window in windows.iter_mut() {
+        window.set_title(String::from("CyberHarvest: Data Breach"));
+        window.set_resizable(false);
+    }
+
     commands.spawn(Camera2dBundle {
         camera_2d: Camera2d {
             clear_color: ClearColorConfig::Custom(Color::rgb(0.0, 0.0, 0.0)),
